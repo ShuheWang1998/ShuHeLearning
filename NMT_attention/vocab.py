@@ -1,5 +1,5 @@
 import torch
-from utils import padding
+import utils
 
 class Vocab(object):
     '''
@@ -49,14 +49,16 @@ class Vocab(object):
                     shuhe.append(text_id + self.word_offset)
                 sen_id.append(shuhe)
         else:
+            shuhe = []
             for text_id in sents:
-                sen_id.append(text_id + self.word_offset)
-        
+                shuhe.append(text_id + self.word_offset)
+            sen_id.append(shuhe)
+            
         return sen_id
     
-    def word2tensor(self, sents: list[list[int]], device: torch.device) -> torch.Tensor:
+    def word2tensor(self, sents, device):
         sents_id = self.sen2id(sents)
-        sents_id = padding(sents_id, self['<pad>'])
+        sents_id = utils.padding(sents_id, self['<pad>'])
         sen_tensor = torch.tensor(sents_id, dtype=torch.long, device=device)
         return sen_tensor.t()
 
