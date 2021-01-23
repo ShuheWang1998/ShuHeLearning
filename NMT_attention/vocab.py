@@ -59,7 +59,7 @@ class Vocab(object):
     def word2tensor(self, sents, device):
         sents_id = self.sen2id(sents)
         sents_id = utils.padding(sents_id, self['<pad>'])
-        sen_tensor = torch.tensor(sents_id, dtype=torch.long, device=device)
+        sen_tensor = torch.tensor(sents_id, dtype=torch.long, device=device).cuda()
         return sen_tensor.t()
 
 class Text(object):

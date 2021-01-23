@@ -15,7 +15,7 @@ class NMT(nn.Module):
         self.window_size_d = options.window_size_d
         self.text = text
         self.device = device
-        self.encoder_layer = options.encoder_layer
+        self.encoder_layer = options.encoder_layer 
         self.decoder_layers = options.decoder_layers
 
         self.encoder = nn.LSTM(input_size=options.embed_size, hidden_size=options.hidden_size, num_layers=options.encoder_layer, bias=True, dropout=options.dropout_rate, bidirectional=False)
@@ -30,11 +30,11 @@ class NMT(nn.Module):
         len_ = []
         for sen in source:
             len_.append(len(sen))
-        source_tensor = self.text.src.word2tensor(source, self.device)
-        target_tensor = self.text.tar.word2tensor(target, self.device)
+        source_tensor = self.text.src.word2tensor(source, self.device).cuda()
+        target_tensor = self.text.tar.word2tensor(target, self.device).cuda()
         encode_h, encode_len, encode_hn_cn = self.encode(source_tensor, len_)
         decode_out = self.decode(encode_hn_cn, encode_h, encode_len, target_tensor)
-        P = nn.functional.softmax(self.ht2final(decode_out), dim=-1)  # sen_len * batch * vocab_size
+        P = nn.functional.log_softmax(self.ht2final(decode_out), dim=-1)  # sen_len * batch * vocab_size
         tar_mask = (target_tensor != self.text.tar['<pad>']).float()
         tar_log_pro = torch.gather(P, index=target_tensor[1:].unsqueeze(-1), dim=-1).squeeze(-1) * tar_mask[1:]
         return tar_log_pro.sum(dim=0)
@@ -52,57 +52,60 @@ class NMT(nn.Module):
         target_tensor = target_tensor[:-1]
         y = self.embeddings.tar(target_tensor)
         ht_ct = h0_c0
-        ht = torch.zeros(encode_h.shape[0], self.hidden_size, device=self.device)
+        ht = torch.zeros(encode_h.shape[0], self.hidden_size, device=self.device).cuda()
         output = []
         for y_t in y:
             now_ht_ct, now_ht = self.step(encode_h, encode_len, torch.cat((y_t, ht), dim=1).view(1, y.shape[1], -1), ht_ct)
             output.append(now_ht)
             ht_ct = now_ht_ct
             ht = now_ht
-        return torch.stack(output).to(self.device) # sen_len * batch * hidden_size
+        return torch.stack(output).to(self.device).cuda() # sen_len * batch * hidden_size
 
     def step(self, encode_h, encode_len, pre_yt, pre_ht_ct):
         yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
         yt = torch.squeeze(yt, dim=0)
         pt = nn.functional.sigmoid(self.tan2pt(nn.functional.tanh(self.ht2tan(yt))))
         batch_ct = None
-        for i, each_pt in enumerate(pt):
-            each_pt = encode_len[i].item() * each_pt.item()
-            left = max(0, int(each_pt) - self.window_size_d)
-            right = min(encode_len[i].item(), int(each_pt) + self.window_size_d)
-            align = None
-            for j in range(left, right):
-                if (j == left):
-                    align = encode_h[i][j].view(1, -1)
+        with torch.no_grad():
+            for i, each_pt in enumerate(pt):
+                each_pt = encode_len[i].item() * each_pt.item()
+                left = max(0, int(each_pt) - self.window_size_d)
+                right = min(encode_len[i].item(), int(each_pt) + self.window_size_d)
+                align = None
+                for j in range(left, right):
+                    if (j == left):
+                        align = encode_h[i][j].view(1, -1)
+                    else:
+                        align = torch.cat((align, encode_h[i][j].view(1, -1)), dim=0)
+                align = nn.functional.softmax(torch.squeeze(torch.bmm(yt[i].view(1, 1, -1), align.t().unsqueeze(dim=0)), dim=0).squeeze(dim=0))
+                ex_p = torch.zeros(right-left, dtype=torch.float16)
+                for j in range(left, right):
+                    ex_p[j-left] = math.exp(-(j-each_pt)*(j-each_pt)/(self.window_size_d*self.window_size_d/2))
+                ex_p = ex_p.to(self.device).cuda()
+                align = align.to(self.device).cuda()
+                at = align * ex_p
+                ct = torch.zeros(self.hidden_size, dtype=torch.float16)
+                ct = ct.to(self.device).cuda()
+                for j in range(left, right):
+                    ct += at[j-left]*encode_h[i][j]
+                if (i == 0):
+                    batch_ct = torch.cat((ct.view(1, -1), yt[i].view(1, -1)), dim=1)
                 else:
-                    align = torch.cat((align, encode_h[i][j].view(1, -1)), dim=0)
-            align = nn.functional.softmax(torch.squeeze(torch.bmm(yt[i].view(1, 1, -1), align.t().unsqueeze(dim=0)), dim=0).squeeze(dim=0))
-            ex_p = torch.zeros(right-left, dtype=torch.float16)
-            for j in range(left, right):
-                ex_p[j-left] = math.exp(-(j-each_pt)*(j-each_pt)/(self.window_size_d*self.window_size_d/2))
-            ex_p = ex_p.to(self.device)
-            align = align.to(self.device)
-            at = align * ex_p
-            ct = torch.zeros(self.hidden_size, dtype=torch.float16)
-            ct = ct.to(self.device)
-            for j in range(left, right):
-                ct += at[j-left]*encode_h[i][j]
-            if (i == 0):
-                batch_ct = torch.cat((ct.view(1, -1), yt[i].view(1, -1)), dim=1)
-            else:
-                batch_ct = torch.cat((batch_ct, torch.cat((ct.view(1, -1), yt[i].view(1, -1)), dim=1)), dim=0)
+                    batch_ct = torch.cat((batch_ct, torch.cat((ct.view(1, -1), yt[i].view(1, -1)), dim=1)), dim=0)
+        #batch_ct = torch.zeros(pt.shape[0], self.hidden_size * 2, device=self.device)
         ht = nn.functional.tanh(self.ct2ht(batch_ct))
+        batch_ct = None
         return ht_ct, ht
     
     def beam_search(self, src, search_size, max_tar_length):
         src_tensor = self.text.src.word2tensor(src)
-        all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, len(src), self.device)
+        all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, len(src), self.device).cuda()
         now_h = h_n
         now_c = c_n
         end_id = self.text.tar['<end>']
         now_predict = [[self.text.tar['<start>']]]
         now_predict_words = [self.text.tar['<start>']]
-        now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor([[self.text.tar['<start>']]], dtype=torch.long, device=self.device)), torch.zeros(1, self.hidden_size, dtype=torch.float, device=self.device)), dim=-1).view(1, 1, -1)
+        now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor([[self.text.tar['<start>']]], dtype=torch.long, device=self.device).cuda()), torch.zeros(1, self.hidden_size, dtype=torch.float, device=self.device).cuda()), dim=-1).view(1, 1, -1)
         predict = []
         now_predict_length = 0
         while (len(predict) < search_size and now_predict_length < max_tar_length):

@@ -19,12 +19,11 @@ batch_size = 128
 dev_batch_size = 128
 # clip_grad
 log_step = 1
-valid_iter = 5
+valid_iter = 1
 model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/"
 patience = 10
 lr_decay = 0.5
-max_epoch = 50
-
+max_epoch = 100
 
 # test
 checkpoint = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/Best_checkpoint.pth"

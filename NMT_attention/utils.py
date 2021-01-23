@@ -42,13 +42,16 @@ def read_corpus(file_path):
 def batch_iter(data_src, data_tar, batch_size):
     src_sents = []
     tar_sents = []
+    tar_batch_len = 0
     len_ = len(data_src)
     for i in range(len_):
         src_sents.append(data_src[i])
         tar_sents.append(data_tar[i])
+        tar_batch_len += len(data_tar[i]) - 1
         if ((i + 1) % batch_size == 0):
-            yield src_sents, tar_sents
+            yield src_sents, tar_sents, tar_batch_len
+            tar_batch_len = 0
             src_sents = []
             tar_sents = []
     if (len_ % batch_size != 0):
-        yield src_sents, tar_sents
+        yield src_sents, tar_sents, tar_batch_len
