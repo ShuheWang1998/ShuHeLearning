@@ -24,7 +24,6 @@ class NMT(nn.Module):
         self.tan2pt = nn.Linear(in_features=self.hidden_size, out_features=1, bias=False)
         self.ct2ht = nn.Linear(in_features=self.hidden_size*2, out_features=self.hidden_size, bias=False)
         self.ht2final = nn.Linear(in_features=self.hidden_size, out_features=len(self.text.tar), bias=False)
-        self.dropout = nn.Dropout(options.dropout_rate)
     
     def forward(self, source, target):
         len_ = []
@@ -98,30 +97,41 @@ class NMT(nn.Module):
         return ht_ct, ht
     
     def beam_search(self, src, search_size, max_tar_length):
-        src_tensor = self.text.src.word2tensor(src)
-        all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, len(src), self.device).cuda()
+        src_tensor = self.text.src.word2tensor(src, self.device)
+        all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, [len(src)])
+        new_all_h = all_h
+        for i in range(4):
+            new_all_h = torch.cat((new_all_h, all_h), dim=0)
+        all_h = new_all_h
+        all_h = all_h.cuda()
+        encode_len = []
+        for i in range(5):
+            encode_len.append(len(src))
+        encode_len = torch.tensor(encode_len, dtype=torch.long, device=self.device)
+        encode_len = encode_len.cuda()
+        h_n = h_n.cuda()
+        c_n = c_n.cuda()
         now_h = h_n
         now_c = c_n
         end_id = self.text.tar['<end>']
         now_predict = [[self.text.tar['<start>']]]
         now_predict_words = [self.text.tar['<start>']]
-        now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor([[self.text.tar['<start>']]], dtype=torch.long, device=self.device).cuda()), torch.zeros(1, self.hidden_size, dtype=torch.float, device=self.device).cuda()), dim=-1).view(1, 1, -1)
+        now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor([self.text.tar['<start>']], dtype=torch.long, device=self.device).cuda()), torch.zeros(1, self.hidden_size, dtype=torch.float, device=self.device).cuda()), dim=-1).reshape(1, 1, -1)
         predict = []
         now_predict_length = 0
         while (len(predict) < search_size and now_predict_length < max_tar_length):
             now_predict_length += 1
             next_ht_ct, next_ht = self.step(all_h, encode_len, now_batch_word_tensor, (now_h, now_c))
             now_h, now_c = next_ht_ct
-            now_h = torch.squeeze(now_h, dim=0)
-            now_c = torch.squeeze(now_c, dim=0)
-            next_ht = torch.squeeze(next_ht, dim=0)
+            now_h = now_h.permute(1, 0, 2)
+            now_c = now_c.permute(1, 0, 2)
             P = nn.functional.softmax(self.ht2final(next_ht), dim=-1)
             padding_score = None
             for i in range(len(now_predict_words)):
                 if (i == 0):
                     padding_score = P[i]
                 else:
-                    padding_score = torch.cat(padding_score, P[i])
+                    padding_score = torch.cat((padding_score, P[i]), dim=-1)
             _, topk_index = torch.topk(padding_score, 5)
             next_predict_words = []
             next_predict = []
@@ -130,7 +140,6 @@ class NMT(nn.Module):
             now_final_h = None
             for i in range(5):
                 next_word_id = topk_index[i].item() % len(self.text.tar)
-                next_predict_words.append(next_word_id)
                 batch_id = topk_index[i].item() // len(self.text.tar)
                 now_sen = now_predict[batch_id]
                 if (next_word_id == end_id):
@@ -138,16 +147,17 @@ class NMT(nn.Module):
                     if (len(predict) == search_size):
                         break
                     continue
+                next_predict_words.append(next_word_id)
                 now_sen.append(next_word_id)
                 next_predict.append(now_sen)
                 if (next_h is None):
-                    next_h = now_h[batch_id]
-                    next_c = now_c[batch_id]
-                    now_final_h = next_ht[batch_id]
+                    next_h = now_h[batch_id].reshape(1, 4, -1)
+                    next_c = now_c[batch_id].reshape(1, 4, -1)
+                    now_final_h = next_ht[batch_id].reshape(1, -1)
                 else:
-                    next_h = torch.cat((next_h, now_h[batch_id]), dim=0)
-                    next_c = torch.cat((next_c, now_c[batch_id]), dim=0)
-                    now_final_h = torch.cat((now_final_h, next_ht[batch_id]), dim=1)
+                    next_h = torch.cat((next_h, now_h[batch_id].reshape(1, 4, -1)), dim=0)
+                    next_c = torch.cat((next_c, now_c[batch_id].reshape(1, 4, -1)), dim=0)
+                    now_final_h = torch.cat((now_final_h, next_ht[batch_id].reshape(1, -1)), dim=0)
             if (len(predict) == search_size):
                 break
             if (now_predict_length == max_tar_length):
@@ -157,9 +167,10 @@ class NMT(nn.Module):
                         break
             now_predict_words = next_predict_words
             now_predict = next_predict
-            now_h = next_h.view(1, next_h.shape[0], -1)
-            now_c = next_c.view(1, next_c.shape[0], -1)
-            now_batch_word_tensor = torch.cat((self.embeddings.tar(now_predict_words), now_final_h), dim=1)
+            now_h = next_h.view(4, next_h.shape[0], -1).contiguous()
+            now_c = next_c.view(4, next_c.shape[0], -1).contiguous()
+            now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor(now_predict_words, dtype=torch.long, device=self.device)), now_final_h), dim=1)
+            now_batch_word_tensor = now_batch_word_tensor.reshape(1, now_batch_word_tensor.shape[0], now_batch_word_tensor.shape[1])
         return predict
 
     @staticmethod

@@ -32,10 +32,11 @@ def read_corpus(file_path):
                         now.append(data)
                         src.append(now)
                         data = 0
-                        now = []
+                        now = [-2]
                         continue
                     data = data * 10 + int(i)
                 now.append(data)
+            now.append(-1)
             tar.append(now)
     return src, tar
 

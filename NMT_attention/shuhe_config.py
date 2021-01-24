@@ -26,5 +26,5 @@ lr_decay = 0.5
 max_epoch = 100
 
 # test
-checkpoint = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/Best_checkpoint.pth"
+checkpoint = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/checkpoint_1.pth"
 max_tar_length = 100

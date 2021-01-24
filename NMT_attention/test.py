@@ -139,13 +139,14 @@ def test():
     predict = beam_search(model, test_data_src, 5, config.max_tar_length)
     for i in range(len(test_data_tar)):
         for j in range(len(test_data_tar[i])):
-            test_data_tar[i][j] = model.text.tar.id2word[test_data_tar[i][j]]
+            test_data_tar[i][j] = model.text.tar.id2word[test_data_tar[i][j]+model.text.tar.word_offset]
+        test_data_tar[i] = test_data_tar[i][1:-1]
     for i in range(len(predict)):
         for j in range(len(predict[i])):
             for k in range(len(predict[i][j])):
                 predict[i][j][k] = model.text.tar.id2word[predict[i][j][k]]
     bleu = 0.0
-    for i in tqdm(len(test_data_tar)):
+    for i in tqdm(range(len(test_data_tar))):
         bleu += compute_bleu(predict[i], test_data_tar[i])
     print(f"BLEU is {bleu}", file=sys.stderr)
     
@@ -159,9 +160,8 @@ def beam_search(model, test_data_src, search_size, max_tra_length):
 
 def compute_bleu(predict, target):
     max_ = 0.0
-    smooth = SmoothingFunction()
     for sub_predict in predict:
-        max_ = max(max_, corpus_bleu([[target]], [sub_predict], smoothing_function=smooth))
+        max_ = max(max_, corpus_bleu([[target]], [sub_predict]))
     return max_
 
 def main():
@@ -172,7 +172,7 @@ def main():
     #train()
     
     #if (args['--train']):
-    train()
+    #train()
     #elif(args['--test']):
     test()
     #else:
