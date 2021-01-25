@@ -145,10 +145,11 @@ def test():
         for j in range(len(predict[i])):
             for k in range(len(predict[i][j])):
                 predict[i][j][k] = model.text.tar.id2word[predict[i][j][k]]
-    bleu = 0.0
+    best_predict = []
     for i in tqdm(range(len(test_data_tar))):
-        bleu += compute_bleu(predict[i], test_data_tar[i])
-    print(f"BLEU is {bleu}", file=sys.stderr)
+        best_predict.append(predict[i][compute_bleu(predict[i], test_data_tar[i])])
+    bleu = corpus_bleu([[tar] for tar in test_data_tar], [sub for sub in best_predict])
+    print(f"BLEU is {bleu*10}", file=sys.stderr)
     
 def beam_search(model, test_data_src, search_size, max_tra_length):
     model.eval()
@@ -160,9 +161,13 @@ def beam_search(model, test_data_src, search_size, max_tra_length):
 
 def compute_bleu(predict, target):
     max_ = 0.0
-    for sub_predict in predict:
-        max_ = max(max_, corpus_bleu([[target]], [sub_predict]))
-    return max_
+    id_ = 0
+    for i, sub_predict in enumerate(predict):
+        bleu = corpus_bleu([[target]], [sub_predict])
+        if (max_ < bleu):
+            max_ = bleu
+            id_ = i
+    return i
 
 def main():
     #args = docopt(__doc__)
