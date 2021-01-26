@@ -140,7 +140,39 @@ a = 1
 tensor_a = torch.tensor(a, dtype=torch.int64)
 print(tensor_a)
 '''
+'''
 a = [[[1, 2, 3]]]
 tensor_a = torch.tensor(a, dtype=torch.long)
 print(tensor_a.shape)
 print(torch.squeeze(tensor_a, dim=0).squeeze(dim=0).shape)
+'''
+'''
+a = [1, 2, 3]
+tensor_a = torch.tensor(a, dtype=torch.float)
+b = [4, 5, 6]
+tensor_b = torch.tensor(b, dtype=torch.float)
+print(tensor_a)
+print(tensor_a.shape)
+print(tensor_b)
+print(tensor_b.shape)
+print(tensor_a * tensor_b)
+print((tensor_a * tensor_b).shape)
+tensor_a[4:] = 9
+print(tensor_a)
+tensor_a = torch.arange(0, 8, 1, dtype=torch.long)
+print(tensor_a)
+'''
+a = [[1, 3, 5], [2, 4, 6]]
+tensor_a = torch.tensor(a, dtype=torch.long)
+b = [8, 9]
+tensor_b = torch.tensor(b, dtype=torch.long).reshape(2, 1)
+print(tensor_a-tensor_b)
+print(-tensor_a)
+a = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
+tensor_a = torch.tensor(a, dtype=torch.float)
+b = [[1, 2], [3, 4]]
+tensor_b = torch.tensor(b, dtype=torch.float)
+print(tensor_a.shape)
+print(tensor_b.shape)
+print(tensor_a)
+print(tensor_a * tensor_b.reshape(tensor_b.shape[0], tensor_b.shape[1], 1))

@@ -8,6 +8,7 @@ from tqdm import tqdm
 import sys
 import os
 from nltk.translate.bleu_score import corpus_bleu
+from optim import Optim
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
@@ -51,9 +52,9 @@ def train():
     model = NMT(text, args, device)
     model = model.to(device)
     model.train()
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(config.lr))
+    optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
 
-    patience = now_best = valid_num = epoch = 0
+    valid_num = epoch = 0
     history_valid_ppl = []
     print("begin training!", file=sys.stderr)
     while (True):
@@ -67,7 +68,7 @@ def train():
                 batch_loss = batch_loss.sum()
                 loss = batch_loss / now_batch_size
                 loss.backward()
-                optimizer.step()
+                optimizer.step_and_updata_lr()
                 pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item()/tar_word_num))})
                 pbar.update(1)
         if (epoch % config.valid_iter == 0):
@@ -79,21 +80,8 @@ def train():
             if (flag):
                 print(f"current model is the best! save to [{config.model_save_path}]", file=sys.stderr)
                 history_valid_ppl.append(eval_ppl)
-                now_best = epoch
-                model.save(os.path.join(config.model_save_path, f"{epoch}_checkpoint.pth"))
-                torch.save(optimizer.state_dict(), os.path.join(config.model_save_path, f"{epoch}_optimizer.optim"))
-            else:
-                patience += 1
-                print(f"hit patience {patience}", sys.stderr)
-                if (patience == config.patience):
-                    print("load the best and decay the lr!", file=sys.stderr)
-                    new_lr = optimizer.param_groups[0]['lr'] * float(config.lr_decay)
-                    model = NMT.load(os.path.join(config.model_save_path, f"{now_best}_checkpoint.pth"))
-                    model = model.to(device)
-                    optimizer.load_state_dict(torch.load(os.path.join(config.model_save_path, f"{now_best}_optimizer.optim")))
-                    for para in optimizer.param_groups:
-                        para['lr'] = new_lr
-                    patience = 0
+                model.save(os.path.join(config.model_save_path, f"{epoch}_{eval_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"{epoch}_{eval_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

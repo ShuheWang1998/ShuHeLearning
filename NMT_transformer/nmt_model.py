@@ -13,12 +13,24 @@ class NMT(nn.Module):
         self.Embeddings = Embeddings(args['embed_size'], text)
         self.transformer = nn.Transformer(d_model=args['d_model'], nhead=args['nhead'], num_encoder_layers=args['num_encoder_layers'], num_decoder_layers=args['num_decoder_layers'], dim_feedforward=args['dim_feedforward'], dropout=args['dropout'])
         self.project = nn.Linear(in_features=args['d_model'], out_features=len(self.text.tar), bias=True)
-    
+        self.dropout = nn.Dropout(args['dropout'])
+
     def forward(self, source, target):
         source_tensor = self.text.src.word2tensor(source, self.device)
         target_tensor = self.text.tar.word2tensor(target, self.device)
         output = self.step(source_tensor, target_tensor)
         P = nn.functional.log_softmax(self.project(output), dim=-1)
+        '''
+        shuhe
+        '''
+        shuhe = P[:-1]
+        shuhe_score = torch.zeros(shuhe.shape[0], shuhe.shape[1], dtype=torch.float, device=self.device)
+        for i in range(shuhe.shape[0]):
+            for j in range(shuhe.shape[1]):
+                shuhe_score[i][j] = shuhe[i][j][target_tensor[i+1][j]]
+        '''
+        shuhe
+        '''
         output_mask = (target_tensor != self.text.tar['<pad>']).float()
         score = torch.gather(P, index=target_tensor[1:].unsqueeze(dim=-1), dim=-1).squeeze(dim=-1) * output_mask[1:]
         return score.sum(dim=0)
@@ -77,9 +89,10 @@ class NMT(nn.Module):
         for i in range(N-1):
             src_PE = torch.cat((src_PE, pre_src_PE), dim=1)
             tar_PE = torch.cat((tar_PE, pre_tar_PE), dim=1)
-        source_embed_tensor = self.Embeddings.src(source_tensor).to(self.device) * math.sqrt(self.args['d_model']) + src_PE
-        target_embed_tensor = self.Embeddings.tar(target_tensor).to(self.device) * math.sqrt(self.args['d_model']) + tar_PE
+        source_embed_tensor = self.Embeddings.src(source_tensor).to(self.device) * math.sqrt(self.args['d_model']) + self.dropout(src_PE)
+        target_embed_tensor = self.Embeddings.tar(target_tensor).to(self.device) * math.sqrt(self.args['d_model']) + self.dropout(tar_PE)
         output = self.transformer(source_embed_tensor, target_embed_tensor, tgt_mask=target_mask, src_key_padding_mask=source_padding_mask, tgt_key_padding_mask=target_padding_mask)
+        #output = target_embed_tensor
         return output
 
     def beam_search(self, source, search_size, max_tar_length):

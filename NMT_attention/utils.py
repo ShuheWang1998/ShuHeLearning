@@ -56,3 +56,11 @@ def batch_iter(data_src, data_tar, batch_size):
             tar_sents = []
     if (len_ % batch_size != 0):
         yield src_sents, tar_sents, tar_batch_len
+
+def get_num(file_path):
+    cnt = 0
+    with open(file_path, "r") as f:
+        for line in f:
+            cnt += 1
+        f.close()
+    return cnt

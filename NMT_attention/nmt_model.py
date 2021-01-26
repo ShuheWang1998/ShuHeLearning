@@ -1,4 +1,3 @@
-import math
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
@@ -48,7 +47,6 @@ class NMT(nn.Module):
         return output, each_len, (hn, cn)
 
     def decode(self, h0_c0, encode_h, encode_len, target_tensor):
-        target_tensor = target_tensor[:-1]
         y = self.embeddings.tar(target_tensor)
         ht_ct = h0_c0
         ht = torch.zeros(encode_h.shape[0], self.hidden_size, device=self.device).cuda()
@@ -61,6 +59,7 @@ class NMT(nn.Module):
         return torch.stack(output).to(self.device).cuda() # sen_len * batch * hidden_size
 
     def step(self, encode_h, encode_len, pre_yt, pre_ht_ct):
+        '''
         yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
         yt = torch.squeeze(yt, dim=0)
         pt = nn.functional.sigmoid(self.tan2pt(nn.functional.tanh(self.ht2tan(yt))))
@@ -95,6 +94,31 @@ class NMT(nn.Module):
         ht = nn.functional.tanh(self.ct2ht(batch_ct))
         batch_ct = None
         return ht_ct, ht
+        '''
+        encode_len = encode_len.to(self.device)
+        yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
+        yt = torch.squeeze(yt, dim=0) # batch * hidden_size
+        batch_size = yt.shape[0]
+        pt = nn.functional.sigmoid(self.tan2pt(nn.functional.tanh(self.ht2tan(yt)))).reshape(yt.shape[0]) * encode_len # batch
+        pt = pt.reshape(batch_size, 1)  # batch * 1
+        with torch.no_grad():
+            # encode_h : batch * sen_len * hidden_size
+            pre_align = torch.bmm(yt.reshape(batch_size, 1, self.hidden_size), torch.transpose(encode_h, 1, 2)).squeeze(dim=1) # batch * sen_len
+            for i in range(batch_size):
+                pre_align[i][encode_len[i]:] = float('-inf')
+            align = nn.functional.softmax(pre_align, dim=-1) # batch * sen_len
+            per_s = torch.arange(0, encode_h.shape[1], dtype=torch.long).reshape(1, encode_h.shape[1])
+            S = per_s
+            for i in range(batch_size-1):
+                S = torch.cat((S, per_s), dim=0)
+            S = S.to(self.device)
+            at = align * torch.exp(-(torch.pow(S-pt, 2)/(self.window_size_d*self.window_size_d/2))) # batch * sen_len
+            at = at.reshape(batch_size, -1, 1)
+            pre_ct = at * encode_h # batch * sen_len * hidden_size
+            ct = torch.cat((pre_ct.sum(dim=1), yt), dim=-1)
+        ht = nn.functional.tanh(self.ct2ht(ct))
+        return ht_ct, ht
+        
     
     def beam_search(self, src, search_size, max_tar_length):
         src_tensor = self.text.src.word2tensor(src, self.device)
