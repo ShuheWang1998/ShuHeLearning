@@ -11,7 +11,7 @@ from tqdm import tqdm
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from optim import Optim
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 def evaluate_ppl(model, dev_data_src, dev_data_tar, dev_batch_size):
     flag = model.training
@@ -51,18 +51,15 @@ def train():
     (options, args) = parser.parse_args()
     device = torch.device("cuda:0" if config.cuda else "cpu")
     model = NMT(text, options, device)
-    model = model.cuda()
-    #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/140_164.29781984744628_checkpoint.pth"
+    #model = model.cuda()
+    #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/100_183.1992118469762_checkpoint.pth"
     #print(f"load model from {model_path}", file=sys.stderr)
     #model = NMT.load(model_path)
     #model = torch.nn.DataParallel(model)
     model = model.to(device)
-    model = model.cuda()
+    #model = model.cuda()
     model.train()
     optimizer = Optim(torch.optim.Adam(model.parameters()))
-    #optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.hidden_size, config.warm_up_step)
-    #print(optimizer.lr)
-    #epoch = 140
     epoch = 0
     hist_valid_ppl = []
     patience_loss = patience_num = patience = 0
@@ -85,11 +82,9 @@ def train():
 
                 loss.backward()
                 _ = torch.nn.utils.clip_grad_norm_(model.parameters(), config.clip_grad)
-                #optimizer.updata_lr()
                 optimizer.step_and_updata_lr()
 
-                pbar.set_postfix({"epoch": epoch, "avg_loss": loss.item(), "ppl": math.exp(now_loss.item()/tar_words_num_to_predict), "lr": optimizer.lr})
-                #pbar.set_postfix({"epoch": epoch, "avg_loss": loss.item(), "ppl": math.exp(now_loss.item()/tar_words_num_to_predict)})
+                pbar.set_postfix({"epoch": epoch, "avg_loss": loss.item(), "ppl": math.exp(now_loss.item()/tar_words_num_to_predict)})
                 pbar.update(1)
             patience_ppl = patience_loss / patience_num
             if (len(patience_list) == 0 or patience_ppl < min(patience_list)):
@@ -102,17 +97,16 @@ def train():
                     patience = 0
                     patience_list = []
                 patience_loss = patience_num = 0
-        #print(optimizer.lr)
+        print(optimizer.lr)
         if (epoch % config.valid_iter == 0):
-            optimizer.updata_lr()
             print("now begin validation ...", file=sys.stderr)
             eav_ppl = evaluate_ppl(model, dev_data_src, dev_data_tar, config.dev_batch_size)
             print("validation ppl %.2f" % (eav_ppl), file=sys.stderr)
             flag = len(hist_valid_ppl) == 0 or eav_ppl < min(hist_valid_ppl)
             if (flag):
                 print("current model is the best!, save to [%s]" % (config.model_save_path), file=sys.stderr)
-                model.save(os.path.join(config.model_save_path, f"01.28_{epoch}_{eav_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"01.28_{epoch}_{eav_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"{epoch}_{eav_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"{epoch}_{eav_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

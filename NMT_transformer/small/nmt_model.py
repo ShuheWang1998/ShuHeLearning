@@ -97,22 +97,24 @@ class NMT(nn.Module):
         #output = target_embed_tensor
         return output
 
-    def beam_search(self, source, search_size, max_tar_length, batch_size):
-        '''
+    def beam_search(self, source, search_size, max_tar_length):
+        #self.text.tar.word_offset = 0
+        
         source_tensor = self.text.src.word2tensor(source, self.device)
         now_source_tensor = source_tensor
         now_predict = [[0]]
         predict = []
         now_predict_length = 0
         now_score = torch.zeros(1, dtype=torch.float, device=self.device).reshape(1, 1)
-        while (now_predict_length < max_tar_length):
+        while (len(predict) < search_size and now_predict_length < max_tar_length):
             now_predict_length += 1
             now_predict_tensor = self.text.tar.word2tensor(now_predict, self.device)
-            output = self.step(now_source_tensor, now_predict_tensor)[now_predict_length-1]
-            P = (nn.functional.softmax(self.project(output), dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
+            output = self.step(now_source_tensor, now_predict_tensor)
+            output = output[now_predict_length-1]
+            P = (nn.functional.log_softmax(self.project(output), dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
             score, topk_index = torch.topk(P, 5)
-            score = score.cuda()
-            topk_index = topk_index.cuda()
+            score = score.cpu()
+            topk_index = topk_index.cpu()
             next_predict = []
             next_source_tensor = None
             next_score = []
@@ -121,9 +123,11 @@ class NMT(nn.Module):
                 sent_id = topk_index[i].item() // len(self.text.tar)
                 if (next_word_id == self.text.tar['<end>']):
                     predict.append(now_predict[sent_id][1:].copy())
+                    #print(predict)
                     if (len(predict) == search_size):
                         break
                     continue
+                #print(next_word_id)
                 next_predict.append(now_predict[sent_id].copy())
                 next_predict[-1].append(next_word_id)
                 next_score.append(score[i].item())
@@ -145,66 +149,19 @@ class NMT(nn.Module):
         return predict
         '''
         source_tensor = self.text.src.word2tensor(source, self.device)
-        now_source_tensor = source_tensor
-        now_predict = [[0] for _ in range(batch_size)]
-        predict = [[] for _ in range(batch_size)]
-        now_predict_length = 0
-        now_score = torch.zeros(batch_size, dtype=torch.float, device=self.device).reshape(batch_size, 1)
-        batch_index = [(i, 1) for i in range(batch_size)]
-        while (now_predict_length < max_tar_length):
-            now_predict_length += 1
-            now_predict_tensor = self.text.tar.word2tensor(now_predict, self.device)
-            output = self.step(now_source_tensor, now_predict_tensor)[-1]
-            P = (nn.functional.log_softmax(self.project(output), dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
-            next_batch_index = []
-            now_start = 0
-            next_predict = []
-            next_source = []
-            next_score = []
-            flag = False
-            for key, value in batch_index:
-                score, topk_index = torch.topk(P[len(self.text.tar)*now_start:len(self.text.tar)*(value+now_start)], search_size)
-                next_value = 0
-                now_flag = False
-                for i in range(search_size):
-                    next_word_id = topk_index[i].item() % len(self.text.tar)
-                    sent_id = topk_index[i].item() // len(self.text.tar)
-                    if (next_word_id == self.text.tar['<end>']):
-                        predict[key].append(now_predict[now_start+sent_id][1:].copy())
-                        if (len(predict[key]) == search_size):
-                            now_flag = True
-                            break
-                        continue
-                now_start += value
-                if (now_flag):
-                    continue
-                for i in range(search_size):
-                    next_word_id = topk_index[i].item() % len(self.text.tar)
-                    sent_id = topk_index[i].item() // len(self.text.tar)
-                    if (next_word_id == self.text.tar['<end>']):
-                        continue
-                    next_value += 1
-                    next_predict.append(now_predict[now_start-value+sent_id].copy())
-                    next_predict[-1].append(next_word_id)
-                    next_score.append(score[i].item())
-                    next_source.append(source[key])
-                flag = True
-                next_batch_index.append((key, next_value))
-            if (not flag):
-                break
-            now_score = torch.tensor(next_score, dtype=torch.float, device=self.device).reshape(-1, 1)
-            now_source_tensor = self.text.src.word2tensor(next_source, self.device)
-            now_predict = next_predict
-            batch_index = next_batch_index
-        now_start = 0
-        for key, value in batch_index:
-            for i in range(value):
-                predict[key].append(now_predict[now_start+i][1:].copy())
-                if (len(predict[key]) == search_size):
-                    break
-            now_start += value
-        return predict
-        
+        predict = [0]
+        while (len(predict) < max_tar_length):
+            predict_tensor = self.text.tar.word2tensor(predict, self.device)
+            output = self.step(source_tensor, predict_tensor)
+            output = output[len(predict)-1]
+            P = nn.functional.softmax(self.project(output), dim=-1).reshape(output.shape[0]*len(self.text.tar))
+            _, topk_index = torch.topk(P, 1)
+            if (topk_index[0] == self.text.tar['<end>']):
+                return predict[1:]
+            predict.append(topk_index[0].item())
+        return predict[1:]
+        '''
+    
     def save(self, model_path):
         params = {
             'text': self.text,

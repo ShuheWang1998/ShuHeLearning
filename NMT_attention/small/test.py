@@ -31,7 +31,7 @@ def test():
     test_path = config.test_path
     print(f"load test sentences from {test_path}", file=sys.stderr)
     test_data_src, test_data_tar = utils.read_corpus(test_path)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/55_198.1025806792615_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/small/880_16.40980823309212_checkpoint.pth"
     print(f"load model from {model_path}", file=sys.stderr)
     model = NMT.load(model_path)
     if (config.cuda):

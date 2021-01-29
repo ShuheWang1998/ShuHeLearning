@@ -1,6 +1,6 @@
-train_path = "/data/wangshuhe/learn/process_data/train.txt"
-dev_path = "/data/wangshuhe/learn/process_data/dev.txt"
-test_path = "/data/wangshuhe/learn/process_data/test.txt"
+train_path = "/data/wangshuhe/learn/process_data/tiny.txt"
+dev_path = "/data/wangshuhe/learn/process_data/tiny.txt"
+test_path = "/data/wangshuhe/learn/process_data/tiny.txt"
 src_corpus = "/data/wangshuhe/learn/process_data/de.dict"
 tar_corpus = "/data/wangshuhe/learn/process_data/en.dict"
 
@@ -18,10 +18,9 @@ batch_size = 196
 dev_batch_size = 196
 clip_grad = 5
 valid_iter = 5
-model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/"
+model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/small/result/"
 max_epoch = 10000
 patience = 10
-warm_up_step = 4000
 
 # test
 checkpoint = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/checkpoint.pth"

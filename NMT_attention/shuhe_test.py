@@ -162,6 +162,7 @@ print(tensor_a)
 tensor_a = torch.arange(0, 8, 1, dtype=torch.long)
 print(tensor_a)
 '''
+'''
 a = [[1, 3, 5], [2, 4, 6]]
 tensor_a = torch.tensor(a, dtype=torch.long)
 b = [8, 9]
@@ -176,3 +177,7 @@ print(tensor_a.shape)
 print(tensor_b.shape)
 print(tensor_a)
 print(tensor_a * tensor_b.reshape(tensor_b.shape[0], tensor_b.shape[1], 1))
+'''
+tensor_a = torch.tensor([1], dtype=torch.float)
+tensor_b = torch.tensor([float('-inf')], dtype=torch.float)
+print(tensor_a+tensor_b)

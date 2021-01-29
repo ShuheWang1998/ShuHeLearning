@@ -16,10 +16,12 @@ nhead = 8
 num_encoder_layers = 6
 num_decoder_layers = 6
 dim_feedforward = 2048
-dropout = 0.1
+dropout = 0.2
 # dev
 dev_batch_size = 180
 model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/"
 # test
 # checkpoint
 max_tar_length = 100
+test_batch_size = 50
+num_threads = 8
