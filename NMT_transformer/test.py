@@ -52,7 +52,7 @@ def test():
     model = NMT.load(model_path)
     if (config.cuda):
         model = model.to(torch.device("cuda:0"))
-    predict = beam_search(model, test_data_src, 5, config.max_tar_length)
+    predict = beam_search(model, test_data_src, 15, config.max_tar_length)
     for i in range(len(test_data_tar)):
         for j in range(len(test_data_tar[i])):
             test_data_tar[i][j] = model.text.tar.id2word[test_data_tar[i][j]]
