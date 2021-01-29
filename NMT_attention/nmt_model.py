@@ -110,12 +110,11 @@ class NMT(nn.Module):
         shuhe = np.zeros((batch_size, encode_h.shape[1]), dtype=float)
         for i in range(batch_size):
             shuhe[i][encode_len[i].item():] = float('-inf')
-        shuhe = torch.tensor(shuhe, dtype=torch.float, device=self.device).reshape(batch_size, encode_h.shape[1])
         '''
         for i in range(batch_size):
             pre_align[i][encode_len[i].item():] = float('-inf')
         '''
-        pre_align = pre_align - shuhe
+        pre_align = pre_align - torch.tensor(shuhe, dtype=torch.float, device=self.device, requires_grad=False).reshape(batch_size, encode_h.shape[1])
         align = nn.functional.softmax(pre_align, dim=-1) # batch * sen_len
         per_s = torch.arange(0, encode_h.shape[1], dtype=torch.long, device=self.device).reshape(1, encode_h.shape[1]).expand(batch_size, encode_h.shape[1])
         at = align * torch.exp(-(torch.pow(per_s-pt, 2)/(self.window_size_d*self.window_size_d/2))) # batch * sen_len
