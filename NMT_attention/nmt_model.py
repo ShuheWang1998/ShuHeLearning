@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 from embeddings import Embeddings
+import numpy as np
 
 
 class NMT(nn.Module):
@@ -57,7 +58,7 @@ class NMT(nn.Module):
             ht_ct = now_ht_ct
             ht = now_ht
         return torch.stack(output).to(self.device).cuda() # sen_len * batch * hidden_size
-   # @profile
+    @profile
     def step(self, source, encode_h, encode_len, pre_yt, pre_ht_ct):
         '''
         yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
@@ -106,8 +107,15 @@ class NMT(nn.Module):
         pre_align = torch.bmm(yt.reshape(batch_size, 1, self.hidden_size), torch.transpose(encode_h, 1, 2)).squeeze(dim=1) # batch * sen_len
         #src_mask = (source != self.text.src['<pad>']).float().t()
         #shuhe = torch.full((batch_size, encode_h.shape[1]), float("-inf"), dtype=torch.float, device=self.device)
+        shuhe = np.zeros((batch_size, encode_h.shape[1]), dtype=float)
+        for i in range(batch_size):
+            shuhe[i][encode_len[i].item():] = float('-inf')
+        shuhe = torch.tensor(shuhe, dtype=torch.float, device=self.device).reshape(batch_size, encode_h.shape[1])
+        '''
         for i in range(batch_size):
             pre_align[i][encode_len[i].item():] = float('-inf')
+        '''
+        pre_align = pre_align - shuhe
         align = nn.functional.softmax(pre_align, dim=-1) # batch * sen_len
         per_s = torch.arange(0, encode_h.shape[1], dtype=torch.long, device=self.device).reshape(1, encode_h.shape[1]).expand(batch_size, encode_h.shape[1])
         at = align * torch.exp(-(torch.pow(per_s-pt, 2)/(self.window_size_d*self.window_size_d/2))) # batch * sen_len
