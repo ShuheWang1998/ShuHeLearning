@@ -7,17 +7,10 @@ class Vocab(object):
     '''
     def __init__(self, file):
         self.word2id = dict()
-        self.word2id['<start>'] = 0
-        self.word2id['<end>'] = 1
-        self.word2id['<pad>'] = 2
-        self.word2id['<unk>'] = 3
-        self.word_offset = 2
-        word_cnt = 4
+        word_cnt = 0
         with open(file, "r") as f:
             for line in f:
                 line = line.strip()
-                if (line == 'Unknown'):
-                    continue
                 self.word2id[line] = word_cnt
                 word_cnt += 1
             f.close()
@@ -46,12 +39,12 @@ class Vocab(object):
             for sen in sents:
                 shuhe = []
                 for text_id in sen:
-                    shuhe.append(text_id + self.word_offset)
+                    shuhe.append(text_id)
                 sen_id.append(shuhe)
         else:
             shuhe = []
             for text_id in sents:
-                shuhe.append(text_id + self.word_offset)
+                shuhe.append(text_id)
             sen_id.append(shuhe)
             
         return sen_id
@@ -63,8 +56,7 @@ class Vocab(object):
         return sen_tensor.t()
 
 class Text(object):
-    
-    def __init__(self, file_src, file_tar):
-        self.src = Vocab(file_src)
-        self.tar = Vocab(file_tar)
-    
+
+    def __init__(self, source, target):
+        self.src = Vocab(source)
+        self.tar = Vocab(target)

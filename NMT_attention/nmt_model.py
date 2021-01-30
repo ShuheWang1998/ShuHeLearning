@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 from embeddings import Embeddings
-import numpy as np
+import math
+import shuhe_config as config
 
 
 class NMT(nn.Module):
@@ -58,7 +59,7 @@ class NMT(nn.Module):
             ht_ct = now_ht_ct
             ht = now_ht
         return torch.stack(output).to(self.device).cuda() # sen_len * batch * hidden_size
-    @profile
+    #@profile
     def step(self, source, encode_h, encode_len, pre_yt, pre_ht_ct):
         '''
         yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
@@ -100,32 +101,37 @@ class NMT(nn.Module):
         yt, ht_ct = self.decoder(pre_yt, pre_ht_ct)
         yt = torch.squeeze(yt, dim=0) # batch * hidden_size
         batch_size = yt.shape[0]
-        pt = nn.functional.sigmoid(self.tan2pt(nn.functional.tanh(self.ht2tan(yt)))).reshape(yt.shape[0]) * encode_len # batch
-        pt = pt.reshape(batch_size, 1)  # batch * 1
+        pt = torch.sigmoid(self.tan2pt(torch.tanh(self.ht2tan(yt)))).view(yt.shape[0]) * encode_len # batch
+        pt = pt.view(batch_size, 1)  # batch * 1
         #with torch.no_grad():
         # encode_h : batch * sen_len * hidden_size
-        pre_align = torch.bmm(yt.reshape(batch_size, 1, self.hidden_size), torch.transpose(encode_h, 1, 2)).squeeze(dim=1) # batch * sen_len
-        #src_mask = (source != self.text.src['<pad>']).float().t()
+        pre_align = torch.bmm(yt.view(batch_size, 1, self.hidden_size), torch.transpose(encode_h, 1, 2)).squeeze(dim=1) # batch * sen_len
+        src_mask = (source == self.text.src['<pad>']).long().t()
+        src_mask.cuda()
         #shuhe = torch.full((batch_size, encode_h.shape[1]), float("-inf"), dtype=torch.float, device=self.device)
-        shuhe = np.zeros((batch_size, encode_h.shape[1]), dtype=float)
+        '''
+        shuhe = torch.zeros((batch_size, encode_h.shape[1]), dtype=float)
         for i in range(batch_size):
             shuhe[i][encode_len[i].item():] = float('-inf')
+        '''
         '''
         for i in range(batch_size):
             pre_align[i][encode_len[i].item():] = float('-inf')
         '''
-        pre_align = pre_align - torch.tensor(shuhe, dtype=torch.float, device=self.device, requires_grad=False).reshape(batch_size, encode_h.shape[1])
+        pre_align.data.masked_fill_(src_mask.bool(), float('-inf'))
+        #sdz pre_align = pre_align - torch.tensor(shuhe, dtype=torch.float, device=self.device, requires_grad=False).reshape(batch_size, encode_h.shape[1])
         align = nn.functional.softmax(pre_align, dim=-1) # batch * sen_len
-        per_s = torch.arange(0, encode_h.shape[1], dtype=torch.long, device=self.device).reshape(1, encode_h.shape[1]).expand(batch_size, encode_h.shape[1])
+        per_s = torch.arange(0, encode_h.shape[1], dtype=torch.long, device=self.device).view(1, encode_h.shape[1]).expand(batch_size, encode_h.shape[1])
         at = align * torch.exp(-(torch.pow(per_s-pt, 2)/(self.window_size_d*self.window_size_d/2))) # batch * sen_len
-        at = at.reshape(batch_size, -1, 1)
+        at = at.view(batch_size, -1, 1)
         pre_ct = at * encode_h # batch * sen_len * hidden_size
         ct = torch.cat((pre_ct.sum(dim=1), yt), dim=-1)
-        ht = nn.functional.tanh(self.ct2ht(ct))
+        ht = torch.tanh(self.ct2ht(ct))
         return ht_ct, ht
         
     
-    def beam_search(self, src, search_size, max_tar_length):
+    def beam_search(self, src, search_size, max_tar_length, test_batch_size):
+        '''
         src_tensor = self.text.src.word2tensor(src, self.device)
         all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, [len(src)])
         sen_len = all_h.shape[1]
@@ -202,6 +208,115 @@ class NMT(nn.Module):
             now_batch_word_tensor = torch.cat((self.embeddings.tar(torch.tensor(now_predict_words, dtype=torch.long, device=self.device)), now_final_h), dim=1)
             now_batch_word_tensor = now_batch_word_tensor.reshape(1, now_batch_word_tensor.shape[0], now_batch_word_tensor.shape[1])
         return predict
+        '''
+        encode_len = []
+        for i in range(test_batch_size):
+            encode_len.append(len(src[i]))
+        src_tensor = self.text.src.word2tensor(src, self.device)
+        now_source = src_tensor
+        all_h, encode_len, (h_n, c_n) = self.encode(src_tensor, encode_len)
+        sen_len = all_h.shape[1]
+        now_all_h = all_h
+        encode_len = torch.tensor(encode_len, dtype=torch.long, device=self.device)
+        encode_len = encode_len.cuda()
+        now_encode_len = encode_len
+        now_h = h_n
+        now_c = c_n
+        predict = [[] for _ in range(test_batch_size)]
+        now_predict = [[0] for _ in range(test_batch_size)]
+        now_batch_word_tensor = torch.cat((self.embeddings.tar(self.text.tar.word2tensor(now_predict, self.device)).squeeze(dim=0), torch.zeros(test_batch_size, self.hidden_size, dtype=torch.float, device=self.device).cuda()), dim=-1).reshape(1, test_batch_size, -1)
+        now_predict_length = 0
+        now_score = torch.zeros(test_batch_size, dtype=torch.float, device=self.device).reshape(test_batch_size, 1)
+        batch_index = [(i, 1) for i in range(test_batch_size)]
+        while (now_predict_length < max_tar_length):
+            now_predict_length += 1
+            next_ht_ct, next_ht = self.step(now_source, now_all_h, now_encode_len, now_batch_word_tensor.contiguous(), (now_h, now_c))
+            P = (nn.functional.softmax(self.ht2final(next_ht), dim=-1)+now_score).reshape(next_ht.shape[0]*len(self.text.tar))
+            next_batch_index = []
+            now_start = 0
+            next_predict = []
+            next_score = []
+            next_words = []
+            next_all_h = None
+            next_encode_len = []
+            next_h = None
+            next_c = None
+            now_ht = None
+            next_source = None
+            now_source = src_tensor.t()
+            now_h, now_c = next_ht_ct
+            now_h = now_h.permute(1, 0, 2)
+            now_c = now_c.permute(1, 0, 2)
+            flag = False
+            for key, value in batch_index:
+                score, topk_index = torch.topk(P[len(self.text.tar)*now_start:len(self.text.tar)*(value+now_start)], search_size)
+                next_value = 0
+                now_flag = False
+                for i in range(search_size):
+                    next_word_id = topk_index[i].item() % len(self.text.tar)
+                    sent_id = topk_index[i].item() // len(self.text.tar)
+                    if (next_word_id == self.text.tar['<end>']):
+                        if (len(now_predict[now_start+sent_id][1:]) == 0):
+                            continue
+                        predict[key].append(((score[i].item()-now_score[now_start][0].item())/math.pow(len(now_predict[now_start+sent_id][1:]), config.alpha), now_predict[now_start+sent_id][1:].copy()))
+                        if (len(predict[key]) == search_size):
+                            now_flag = True
+                            break
+                        continue
+                now_start += value
+                if (now_flag):
+                    continue
+                for i in range(search_size):
+                    next_word_id = topk_index[i].item() % len(self.text.tar)
+                    sent_id = topk_index[i].item() // len(self.text.tar)
+                    if (next_word_id == self.text.tar['<end>']):
+                        continue
+                    if (now_predict_length == max_tar_length):
+                        predict[key].append((score[i].item()/math.pow(len(now_predict[now_start-value+sent_id][1:])+1, config.alpha), now_predict[now_start-value+sent_id][1:].copy()))
+                        predict[key][-1][1].append(next_word_id)
+                        if (len(predict[key]) == search_size):
+                            now_flag = True
+                            break
+                        continue
+                    next_value += 1
+                    next_predict.append(now_predict[now_start-value+sent_id].copy())
+                    next_predict[-1].append(next_word_id)
+                    next_score.append(score[i].item())
+                    next_words.append([next_word_id])
+                    if (next_all_h is None):
+                        next_all_h = all_h[key].reshape(1, -1, self.hidden_size)
+                        next_encode_len.append(encode_len[key].item())
+                        next_h = now_h[now_start-value+sent_id].reshape(1, 4, -1)
+                        next_c = now_c[now_start-value+sent_id].reshape(1, 4, -1)
+                        now_ht = next_ht[now_start-value+sent_id].reshape(1, -1)
+                        next_source = now_source[key].reshape(1, -1)
+                    else:
+                        next_all_h = torch.cat((next_all_h, all_h[key].reshape(1, sen_len, self.hidden_size)), dim=0)
+                        next_encode_len.append(encode_len[key].item())
+                        next_h = torch.cat((next_h, now_h[now_start-value+sent_id].reshape(1, 4, -1)), dim=0)
+                        next_c = torch.cat((next_c, now_c[now_start-value+sent_id].reshape(1, 4, -1)), dim=0)
+                        now_ht = torch.cat((now_ht, next_ht[now_start-value+sent_id].reshape(1, -1)), dim=0)
+                        next_source = torch.cat((next_source, now_source[key].reshape(1, -1)), dim=0)
+                if (now_flag):
+                    continue
+                flag = True
+                next_batch_index.append((key, next_value))
+            if (not flag):
+                break
+            now_source = next_source.t()
+            now_score = torch.tensor(next_score, dtype=torch.float, device=self.device).reshape(-1, 1)
+            now_all_h = next_all_h
+            now_encode_len = torch.tensor(next_encode_len, dtype=torch.long, device=self.device)
+            now_h = next_h.permute(1, 0, 2).contiguous()
+            now_c = next_c.permute(1, 0, 2).contiguous()
+            now_predict = next_predict
+            batch_index = next_batch_index
+            now_batch_word_tensor = torch.cat((self.embeddings.tar(self.text.tar.word2tensor(next_words, self.device)).squeeze(dim=0), now_ht), dim=-1).reshape(1, len(next_encode_len), -1)
+        output = []
+        for sub in predict:
+            sub = sorted(sub, key=lambda sc: sc[0], reverse=True)
+            output.append(sub[0][1])
+        return output
 
     @staticmethod
     def load(model_path):

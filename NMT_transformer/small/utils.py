@@ -12,28 +12,31 @@ def padding(sents, pad_word):
         padding_sents.append(sen)
     return padding_sents
 
-def read_corpus(file_path):
-    src = []
-    tar = []
+def read_corpus(file_path, flag=False):
+    output = []
     with open(file_path, "r") as f:
         for line in f:
             line = line.strip().split()
             now = []
+            if (flag):
+                now.append(0)
             for word in line:
-                data = 0
-                for ch in word:
-                    if (ch == '|'):
-                        now.append(data+2)
-                        src.append(now)
-                        now = [0]
-                        data = 0
-                        continue
-                    data = data * 10 + int(ch)
-                now.append(data+2)
+                now.append(int(word))
             now.append(1)
-            tar.append(now)
-    return src, tar
+            output.append(now)
+    return output
 
+def get_batch(data):
+    src = []
+    tar = []
+    tar_word_num = 0
+    for sub_src, sub_tar in data:
+        src.append(sub_src)
+        tar.append(sub_tar)
+        tar_word_num += len(sub_tar)
+    return src, tar, tar_word_num
+
+'''
 def get_num(file_path):
     cnt = 0
     with open(file_path, "r") as f:
@@ -57,3 +60,4 @@ def batch_iter(source, target, batch_size):
             tar = []
     if (len_ % batch_size != 0):
         yield src, tar, tar_batch_len
+'''

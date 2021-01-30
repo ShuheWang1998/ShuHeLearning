@@ -1,5 +1,3 @@
-from vocab import Text
-
 def padding(sents, pad_word):
     '''
     sents : list[list[int]] sentences
@@ -15,31 +13,32 @@ def padding(sents, pad_word):
     
     return padding_sents
 
-def get_vocab(file_src, file_tar):
-    return Text(file_src, file_tar)
-
-def read_corpus(file_path):
+def get_batch(data):
     src = []
     tar = []
+    tar_word_num = 0
+    for sub_src, sub_tar in data:
+        src.append(sub_src)
+        tar.append(sub_tar)
+        tar_word_num += len(sub_tar)
+    return src, tar, tar_word_num
+
+def read_corpus(file_path, flag=False):
+    output = []
     with open(file_path, "r") as f:
         for line in f:
             line = line.strip().split()
             now = []
+            if (flag):
+                now.append(0)
             for word in line:
-                data = 0
-                for i in word:
-                    if (i == '|'):
-                        now.append(data)
-                        src.append(now)
-                        data = 0
-                        now = [-2]
-                        continue
-                    data = data * 10 + int(i)
-                now.append(data)
-            now.append(-1)
-            tar.append(now)
-    return src, tar
+                now.append(int(word))
+            if (flag):
+                now.append(1)
+            output.append(now)
+    return output
 
+'''
 def batch_iter(data_src, data_tar, batch_size):
     src_sents = []
     tar_sents = []
@@ -64,3 +63,4 @@ def get_num(file_path):
             cnt += 1
         f.close()
     return cnt
+'''
