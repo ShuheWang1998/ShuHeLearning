@@ -51,9 +51,3 @@ class Vocab(object):
         sents = utils.padding(sents, self.word2id['<pad>'])
         sents_tensor = torch.tensor(sents, dtype=torch.long, device=device)
         return sents_tensor.t()
-
-class Text(object):
-
-    def __init__(self, src_file, tar_file):
-        self.src = Vocab(src_file)
-        self.tar = Vocab(tar_file)

@@ -2,49 +2,39 @@ import torch
 import torch.nn as nn
 import math
 import shuhe_config as config
-from embeddings import Embeddings
 
 class NMT(nn.Module):
 
-    def __init__(self, text, args, device):
+    def __init__(self, vocab, args, device):
         super(NMT, self).__init__()
-        self.text = text
+        self.vocab = vocab
         self.args = args
         self.device = device
-        self.Embeddings = Embeddings(args['embed_size'], self.text)
+        self.Embeddings = nn.Embedding(num_embeddings=len(self.vocab), embedding_dim=args['embed_size'], padding_idx=self.vocab['<pad>'])
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=args['d_model'], nhead=args['nhead'], dim_feedforward=args['dim_feedforward'], dropout=args['dropout'])
         self.encoder_norm = nn.LayerNorm(args['d_model'])
         self.encoder = nn.TransformerEncoder(encoder_layer=self.encoder_layer, num_layers=args['num_encoder_layers'], norm=self.encoder_norm)
         self.decoder_layer = nn.TransformerDecoderLayer(d_model=args['d_model'], nhead=args['nhead'], dim_feedforward=args['dim_feedforward'], dropout=args['dropout'])
         self.decoder_norm = nn.LayerNorm(args['d_model'])
         self.decoder = nn.TransformerDecoder(decoder_layer=self.decoder_layer, num_layers=args['num_decoder_layers'], norm=self.decoder_norm)
-        self.project = nn.Linear(args['d_model'], len(self.text.tar), bias=False)
-        self.project.weight = self.Embeddings.tar.weight
         self.dropout = nn.Dropout(args['dropout'])
-        self.project_value = math.pow(args['d_model'], -0.5)
 
-    def forward(self, source, target, smoothing=False):
-        source_tensor = self.text.src.word2tensor(source, self.device)
-        target_tensor = self.text.tar.word2tensor(target, self.device)
+    def forward(self, source, target):
+        source_tensor = self.vocab.word2tensor(source, self.device)
+        target_tensor = self.vocab.word2tensor(target, self.device)
         memory, memory_padding_mask = self.encode(source_tensor)
         output = self.decode(memory, memory_padding_mask, target_tensor)
-        output_mask = (target_tensor != self.text.tar['<pad>']).float()
-        if (smoothing):
-            eps = self.args['smoothing_eps']
-            one_hot = torch.full((output.shape[0], output.shape[1], len(self.text.tar)), eps/(len(self.text.tar)-1), dtype=torch.float, device=self.device).scatter_(-1, index=target_tensor.unsqueeze(dim=-1), value=(1-eps))
-            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1) * one_hot
-            score = (P[1:] * output_mask[1:].unsqueeze(dim=-1)).sum(dim=-1)
-        else:
-            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)
-            score = torch.gather(P, index=target_tensor[1:].unsqueeze(dim=-1), dim=-1).squeeze(dim=-1) * output_mask[1:]
+        P = nn.functional.log_softmax(nn.functional.linear(input=output, weight=self.Embeddings.weight), dim=-1)
+        output_mask = (target_tensor != self.vocab['<pad>']).float()
+        score = torch.gather(P, index=target_tensor[1:].unsqueeze(dim=-1), dim=-1).squeeze(dim=-1) * output_mask[1:]
         return score.sum(dim=0)
 
     def encode(self, source_tensor):
         S = source_tensor.shape[0]
         N = source_tensor.shape[1]
-        source_padding_mask = (source_tensor == self.text.src['<pad>']).bool().t()
+        source_padding_mask = (source_tensor == self.vocab['<pad>']).bool().t()
         source_padding_mask = source_padding_mask.to(self.device)
-        source_embed_tensor = self.dropout(self.Embeddings.src(source_tensor).to(self.device)+self.get_position(S, N))
+        source_embed_tensor = self.Embeddings(source_tensor).to(self.device) * math.sqrt(self.args['d_model']) + self.dropout(self.get_position(S, N))
         output = self.encoder(source_embed_tensor, src_key_padding_mask=source_padding_mask)
         # output: sen_len * batch_size * feature_size
         # source_padding_mask: batch_size * sen_len
@@ -59,9 +49,9 @@ class NMT(nn.Module):
             target_mask[i][i+1:] = True
         target_mask[T-1][0:] = False
         target_mask = target_mask.to(self.device)
-        target_padding_mask = (target_tensor == self.text.tar['<pad>']).bool().t()
+        target_padding_mask = (target_tensor == self.vocab['<pad>']).bool().t()
         target_padding_mask = target_padding_mask.to(self.device)
-        target_embed_tensor = self.dropout(self.Embeddings.tar(target_tensor).to(self.device)+self.get_position(T, N))
+        target_embed_tensor = self.Embeddings(target_tensor).to(self.device) * math.sqrt(self.args['d_model']) + self.dropout(self.get_position(T, N))
         output = self.decoder(target_embed_tensor, memory, tgt_mask=target_mask, tgt_key_padding_mask=target_padding_mask, memory_key_padding_mask=memory_padding_mask)
         # output: sen_len * batch_size * feature
         return output
@@ -128,7 +118,7 @@ class NMT(nn.Module):
             now_predict = next_predict.copy()
         return predict
         '''
-        source_tensor = self.text.src.word2tensor(source, self.device)
+        source_tensor = self.vocab.word2tensor(source, self.device)
         memory, memory_padding = self.encode(source_tensor)
         now_memory = memory
         now_memory_padding = memory_padding
@@ -139,9 +129,9 @@ class NMT(nn.Module):
         batch_index = [(i, 1) for i in range(batch_size)]
         while (now_predict_length < max_tar_length):
             now_predict_length += 1
-            now_predict_tensor = self.text.tar.word2tensor(now_predict, self.device)
+            now_predict_tensor = self.vocab.word2tensor(now_predict, self.device)
             output = self.decode(now_memory, now_memory_padding, now_predict_tensor)[-1]
-            P = (nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
+            P = (nn.functional.log_softmax(nn.functional.linear(output, self.Embeddings.weight), dim=-1)+now_score).reshape(output.shape[0]*len(self.vocab))
             now_memory = memory.permute(1, 0, 2)
             now_memory_padding = memory_padding
             next_memory = None
@@ -152,13 +142,13 @@ class NMT(nn.Module):
             next_score = []
             flag = False
             for key, value in batch_index:
-                score, topk_index = torch.topk(P[len(self.text.tar)*now_start:len(self.text.tar)*(value+now_start)], search_size)
+                score, topk_index = torch.topk(P[len(self.vocab)*now_start:len(self.vocab)*(value+now_start)], search_size)
                 next_value = 0
                 now_flag = False
                 for i in range(search_size):
-                    next_word_id = topk_index[i].item() % len(self.text.tar)
-                    sent_id = topk_index[i].item() // len(self.text.tar)
-                    if (next_word_id == self.text.tar['<end>']):
+                    next_word_id = topk_index[i].item() % len(self.vocab)
+                    sent_id = topk_index[i].item() // len(self.vocab)
+                    if (next_word_id == self.vocab['<end>']):
                         if (len(now_predict[now_start+sent_id][1:]) == 0):
                             continue
                         predict[key].append(((score[i].item()-now_score[now_start][0].item())/math.pow(len(now_predict[now_start+sent_id][1:]), config.alpha), now_predict[now_start+sent_id][1:].copy()))
@@ -170,9 +160,9 @@ class NMT(nn.Module):
                 if (now_flag):
                     continue
                 for i in range(search_size):
-                    next_word_id = topk_index[i].item() % len(self.text.tar)
-                    sent_id = topk_index[i].item() // len(self.text.tar)
-                    if (next_word_id == self.text.tar['<end>']):
+                    next_word_id = topk_index[i].item() % len(self.vocab)
+                    sent_id = topk_index[i].item() // len(self.vocab)
+                    if (next_word_id == self.vocab['<end>']):
                         continue
                     if (now_predict_length == max_tar_length):
                         predict[key].append((score[i].item()/math.pow(len(now_predict[now_start-value+sent_id][1:])+1, config.alpha), now_predict[now_start-value+sent_id][1:].copy()))
@@ -210,7 +200,7 @@ class NMT(nn.Module):
         
     def save(self, model_path):
         params = {
-            'text': self.text,
+            'vocab': self.vocab,
             'args': self.args,
             'device': self.device,
             'state_dict': self.state_dict()
@@ -220,6 +210,6 @@ class NMT(nn.Module):
     @staticmethod
     def load(model_path):
         params = torch.load(model_path, map_location=lambda storage, loc: storage)
-        model = NMT(params['text'], params['args'], params['device'])
+        model = NMT(params['vocab'], params['args'], params['device'])
         model.load_state_dict(params['state_dict'])
         return model

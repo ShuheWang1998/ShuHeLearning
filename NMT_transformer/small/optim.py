@@ -24,3 +24,4 @@ class Optim():
     
     def zero_grad(self):
         self.optimizer.zero_grad()
+    

@@ -52,6 +52,9 @@ def train():
     parser.add_option("--dropout_rate", dest="dropout_rate", default=config.dropout_rate)
     (options, args) = parser.parse_args()
     device = torch.device("cuda:0" if config.cuda else "cpu")
+    #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/01.31_drop0.3_54_21.46508598886769_checkpoint.pth"
+    #print(f"load model from {model_path}", file=sys.stderr)
+    #model = NMT.load(model_path)
     model = NMT(text, options, device)
     #model = model.cuda()
     #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/140_164.29781984744628_checkpoint.pth"
@@ -64,8 +67,8 @@ def train():
     optimizer = Optim(torch.optim.Adam(model.parameters()))
     #optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.hidden_size, config.warm_up_step)
     #print(optimizer.lr)
-    #epoch = 140
-    epoch = valid_num = 0
+    epoch = 0
+    valid_num = 1
     hist_valid_ppl = []
 
     print("begin training!")
@@ -91,11 +94,11 @@ def train():
                 pbar.update(1)
         #print(optimizer.lr)
         if (epoch % config.valid_iter == 0):
-            if (epoch >= 5*config.valid_iter):
-                if (valid_num % 3 == 0):
-                    valid_num = 0
-                    optimizer.updata_lr()
-                valid_num += 1
+            #if (epoch >= config.valid_iter//2):
+            if (valid_num % 5 == 0):
+                valid_num = 0
+                optimizer.updata_lr()
+            valid_num += 1
             print("now begin validation ...", file=sys.stderr)
             eav_ppl = evaluate_ppl(model, dev_data, dev_loader)
             print("validation ppl %.2f" % (eav_ppl), file=sys.stderr)
@@ -103,8 +106,8 @@ def train():
             if (flag):
                 print("current model is the best!, save to [%s]" % (config.model_save_path), file=sys.stderr)
                 hist_valid_ppl.append(eav_ppl)
-                model.save(os.path.join(config.model_save_path, f"01.30_{epoch}_{eav_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"01.30_{epoch}_{eav_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.01_window30_{epoch}_{eav_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.01_window30_{epoch}_{eav_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

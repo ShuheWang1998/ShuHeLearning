@@ -53,10 +53,10 @@ def train():
     (options, args) = parser.parse_args()
     device = torch.device("cuda:0" if config.cuda else "cpu")
     model = NMT(text, options, device)
-    #model = model.cuda()
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/small/result/01.29_140_1.0110098063079365_checkpoint.pth"
-    print(f"load model from {model_path}", file=sys.stderr)
-    model = NMT.load(model_path)
+    model = model.cuda()
+    #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/small/result/01.29_140_1.0110098063079365_checkpoint.pth"
+    #print(f"load model from {model_path}", file=sys.stderr)
+    #model = NMT.load(model_path)
     #model = torch.nn.DataParallel(model)
     model = model.to(device)
     model = model.cuda()

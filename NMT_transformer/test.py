@@ -11,7 +11,7 @@ from data import Data
 from vocab import Vocab
 import utils
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 def beam_search(model, test_data, test_data_loader, search_size, max_tar_length):
     model.eval()
@@ -45,7 +45,7 @@ def test():
     #test_data_src, test_data_tar = utils.read_corpus(config.test_path)
     test_data = Data(config.test_path_src, config.test_path_tar, vocab)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/01.29_15_17.08519745870326_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.01_3_65122.298483605955_checkpoint.pth"
     model = NMT.load(model_path)
     if (config.cuda):
         model = model.to(torch.device("cuda:0"))

@@ -10,7 +10,7 @@ from data import Data
 from torch.utils.data import DataLoader
 import math
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 def beam_search(model, test_data, test_data_loader, search_size, max_tra_length):
     model.eval()
@@ -42,7 +42,7 @@ def test():
     print(f"load test sentences from [{config.test_path_src}], [{config.test_path_tar}]", file=sys.stderr)
     test_data = Data(config.test_path_src, config.test_path_tar)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/01.30_5_9.498937341382337_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/02.01_window30_6_8.837408715389843_checkpoint.pth"
     print(f"load model from {model_path}", file=sys.stderr)
     model = NMT.load(model_path)
     if (config.cuda):

@@ -7,7 +7,7 @@ class Optim():
         self.d_model = d_model
         self.warm_up_step = warm_up_step
         self.n_current_step = 0
-        self.init_lr = math.pow(self.d_model, -0.5)
+        self.init_lr = math.pow(self.d_model, -0.8)
 
     def step_and_updata_lr(self):
         self.updata_lr()
@@ -24,4 +24,3 @@ class Optim():
     
     def zero_grad(self):
         self.optimizer.zero_grad()
-    

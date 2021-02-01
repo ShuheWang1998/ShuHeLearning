@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 
 class Data(Dataset):
 
-    def __init__(self, src_file, tar_file):
+    def __init__(self, src_file, tar_file, vocab):
         self.src = utils.read_corpus(src_file)
         self.tar = utils.read_corpus(tar_file, True)
         self.len_ = len(self.src)
