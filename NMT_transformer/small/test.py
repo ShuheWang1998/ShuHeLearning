@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from data import Data
 import utils
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def beam_search(model, test_data, test_data_loader, search_size, max_tar_length):
     model.eval()
@@ -43,7 +43,7 @@ def test():
     #test_data_src, test_data_tar = utils.read_corpus(config.test_path)
     test_data = Data(config.test_path_src, config.test_path_tar)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/small/result/02.01_200_0.0_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/small/result/02.01_140_1.3581211432292004_checkpoint.pth"
     model = NMT.load(model_path)
     if (config.cuda):
         model = model.to(torch.device("cuda:0"))

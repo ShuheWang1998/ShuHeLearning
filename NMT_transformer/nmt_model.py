@@ -22,6 +22,7 @@ class NMT(nn.Module):
         self.project.weight = self.Embeddings.tar.weight
         self.dropout = nn.Dropout(args['dropout'])
         self.project_value = math.pow(args['d_model'], -0.5)
+        self.eps = args['smoothing_eps']
 
     def forward(self, source, target, smoothing=False):
         source_tensor = self.text.src.word2tensor(source, self.device)
@@ -30,10 +31,13 @@ class NMT(nn.Module):
         output = self.decode(memory, memory_padding_mask, target_tensor)
         output_mask = (target_tensor != self.text.tar['<pad>']).float()
         if (smoothing):
-            eps = self.args['smoothing_eps']
-            one_hot = torch.full((output.shape[0], output.shape[1], len(self.text.tar)), eps/(len(self.text.tar)-1), dtype=torch.float, device=self.device).scatter_(-1, index=target_tensor.unsqueeze(dim=-1), value=(1-eps))
-            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1) * one_hot
-            score = (P[1:] * output_mask[1:].unsqueeze(dim=-1)).sum(dim=-1)
+            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)
+            goal = torch.full((P.shape[0], P.shape[1], P.shape[2]), self.eps/(len(self.text.tar)-1), dtype=torch.float, device=self.device)
+            goal = goal.scatter_(-1, index=target_tensor[1:].unsqueeze(dim=-1), value=1-self.eps)
+            score = (P*goal).sum(dim=-1)
+            end_mask = (target_tensor != self.text.tar['<end>']).float()
+            output_mask = output_mask*end_mask
+            score = score[:-1]*output_mask[:-1]
         else:
             P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)
             score = torch.gather(P, index=target_tensor[1:].unsqueeze(dim=-1), dim=-1).squeeze(dim=-1) * output_mask[1:]

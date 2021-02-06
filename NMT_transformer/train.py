@@ -74,7 +74,7 @@ def train():
             for batch_src, batch_tar, tar_word_num in train_loader:
                 optimizer.zero_grad()
                 now_batch_size = len(batch_src)
-                batch_loss = -model(batch_src, batch_tar, smoothing=False)
+                batch_loss = -model(batch_src, batch_tar, smoothing=True)
                 batch_loss = batch_loss.sum()
                 loss = batch_loss / now_batch_size
                 loss.backward()
@@ -89,8 +89,8 @@ def train():
             if (flag):
                 print(f"current model is the best! save to [{config.model_save_path}]", file=sys.stderr)
                 history_valid_ppl.append(eval_ppl)
-                model.save(os.path.join(config.model_save_path, f"02.01_{epoch}_{eval_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.01_{epoch}_{eval_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.06_smooth_{epoch}_{eval_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.06_smooth_{epoch}_{eval_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

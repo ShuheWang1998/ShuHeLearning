@@ -65,6 +65,7 @@ def train():
 
     epoch = 0
     history_valid_ppl = []
+    valid_iter = config.valid_iter
     print("begin training!", file=sys.stderr)
     while (True):
         epoch += 1
@@ -74,14 +75,17 @@ def train():
             for batch_src, batch_tar, tar_word_num in train_loader:
                 optimizer.zero_grad()
                 now_batch_size = len(batch_src)
-                batch_loss = -model(batch_src, batch_tar, smoothing=False)
+                batch_loss = -model(batch_src, batch_tar, smoothing=True)
                 batch_loss = batch_loss.sum()
+                #batch_loss = model(batch_src, batch_tar, smoothing=True)
                 loss = batch_loss / now_batch_size
                 loss.backward()
                 optimizer.step_and_updata_lr()
                 pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item()/tar_word_num))})
                 pbar.update(1)
-        if (epoch % config.valid_iter == 0):
+        if (epoch >= 1000):
+            valid_iter = 1
+        if (epoch % valid_iter):
             print("now begin validation...", file=sys.stderr)
             eval_ppl = evaluate_ppl(model, dev_data, dev_loader, config.dev_batch_size)
             print(eval_ppl)

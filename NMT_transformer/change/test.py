@@ -8,7 +8,6 @@ from nltk.translate.bleu_score import corpus_bleu
 import math
 from torch.utils.data import DataLoader
 from data import Data
-from vocab import Vocab
 import utils
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -40,22 +39,21 @@ def compare_bleu(predict, target):
     return id_
 
 def test():
-    vocab = Vocab(config.corpus)
     print(f"load test sentences from [{config.test_path_src}], [{config.test_path_tar}]", file=sys.stderr)
     #test_data_src, test_data_tar = utils.read_corpus(config.test_path)
-    test_data = Data(config.test_path_src, config.test_path_tar, vocab)
+    test_data = Data(config.test_path_src, config.test_path_tar)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/01.29_15_17.08519745870326_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/change/result/02.01_20_15.874551542588957_checkpoint.pth"
     model = NMT.load(model_path)
     if (config.cuda):
         model = model.to(torch.device("cuda:0"))
-    predict, test_data_tar = beam_search(model, test_data, test_data_loader, 20, config.max_tar_length)
+    predict, test_data_tar = beam_search(model, test_data, test_data_loader, 15, config.max_tar_length)
     for i in range(len(test_data_tar)):
         for j in range(len(test_data_tar[i])):
-            test_data_tar[i][j] = model.vocab.id2word[test_data_tar[i][j]]
+            test_data_tar[i][j] = model.text.tar.id2word[test_data_tar[i][j]]
     for i in range(len(predict)):
         for j in range(len(predict[i])):
-            predict[i][j] = model.vocab.id2word[predict[i][j]]
+            predict[i][j] = model.text.tar.id2word[predict[i][j]]
     bleu = corpus_bleu([[tar[1:-1]] for tar in test_data_tar], [pre for pre in predict])
     print(f"Corpus BLEU: {bleu * 100}", file=sys.stderr)
 

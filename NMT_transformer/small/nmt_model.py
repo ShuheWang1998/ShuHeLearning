@@ -3,6 +3,7 @@ import torch.nn as nn
 import math
 import shuhe_config as config
 from embeddings import Embeddings
+#from label_smoothing import LabelSmoothing
 
 class NMT(nn.Module):
 
@@ -21,7 +22,9 @@ class NMT(nn.Module):
         self.project = nn.Linear(args['d_model'], len(self.text.tar), bias=False)
         self.project.weight = self.Embeddings.tar.weight
         self.dropout = nn.Dropout(args['dropout'])
-        self.project_value = math.pow(args['d_model'], -0.5)
+        self.eps = args['smoothing_eps']
+        self.project_value = math.pow(args['d_model'], 0.5)
+        #self.smoothing = LabelSmoothing(len(self.text.tar), self.text.tar['<pad>'], self.args['smoothing_eps'])
 
     def forward(self, source, target, smoothing=False):
         source_tensor = self.text.src.word2tensor(source, self.device)
@@ -30,12 +33,14 @@ class NMT(nn.Module):
         output = self.decode(memory, memory_padding_mask, target_tensor)
         output_mask = (target_tensor != self.text.tar['<pad>']).float()
         if (smoothing):
-            eps = self.args['smoothing_eps']
-            one_hot = torch.full((output.shape[0], output.shape[1], len(self.text.tar)), eps/(len(self.text.tar)-1), dtype=torch.float, device=self.device).scatter_(-1, index=target_tensor.unsqueeze(dim=-1), value=(1-eps))
-            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1) * one_hot
-            score = (P[1:] * output_mask[1:].unsqueeze(dim=-1)).sum(dim=-1)
+            #return self.smoothing(nn.functional.log_softmax(self.project(output), dim=-1), target_tensor)
+            P = nn.functional.log_softmax(self.project(output), dim=-1)
+            goal = torch.full((P.shape[0], P.shape[1], P.shape[2]), self.eps/(len(self.text.tar)-1), dtype=torch.float, device=self.device)
+            goal = goal.scatter_(-1, index=target_tensor[1:].unsqueeze(dim=-1), value=1-self.eps)
+            score = (P*goal).sum(dim=-1)
+            score = score[1:]*output_mask[1:]
         else:
-            P = nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)
+            P = nn.functional.log_softmax(self.project(output), dim=-1)
             score = torch.gather(P, index=target_tensor[1:].unsqueeze(dim=-1), dim=-1).squeeze(dim=-1) * output_mask[1:]
         return score.sum(dim=0)
 
@@ -44,7 +49,7 @@ class NMT(nn.Module):
         N = source_tensor.shape[1]
         source_padding_mask = (source_tensor == self.text.src['<pad>']).bool().t()
         source_padding_mask = source_padding_mask.to(self.device)
-        source_embed_tensor = self.dropout(self.Embeddings.src(source_tensor).to(self.device)+self.get_position(S, N))
+        source_embed_tensor = self.dropout(self.Embeddings.src(source_tensor).to(self.device)*self.project_value+self.get_position(S, N))
         output = self.encoder(source_embed_tensor, src_key_padding_mask=source_padding_mask)
         # output: sen_len * batch_size * feature_size
         # source_padding_mask: batch_size * sen_len
@@ -61,7 +66,7 @@ class NMT(nn.Module):
         target_mask = target_mask.to(self.device)
         target_padding_mask = (target_tensor == self.text.tar['<pad>']).bool().t()
         target_padding_mask = target_padding_mask.to(self.device)
-        target_embed_tensor = self.dropout(self.Embeddings.tar(target_tensor).to(self.device)+self.get_position(T, N))
+        target_embed_tensor = self.dropout(self.Embeddings.tar(target_tensor).to(self.device)*self.project_value+self.get_position(T, N))
         output = self.decoder(target_embed_tensor, memory, tgt_mask=target_mask, tgt_key_padding_mask=target_padding_mask, memory_key_padding_mask=memory_padding_mask)
         # output: sen_len * batch_size * feature
         return output
@@ -141,7 +146,7 @@ class NMT(nn.Module):
             now_predict_length += 1
             now_predict_tensor = self.text.tar.word2tensor(now_predict, self.device)
             output = self.decode(now_memory, now_memory_padding, now_predict_tensor)[-1]
-            P = (nn.functional.log_softmax(self.project(output)*self.project_value, dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
+            P = (nn.functional.log_softmax(self.project(output), dim=-1)+now_score).reshape(output.shape[0]*len(self.text.tar))
             now_memory = memory.permute(1, 0, 2)
             now_memory_padding = memory_padding
             next_memory = None

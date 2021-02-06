@@ -11,14 +11,14 @@ cuda = True
 
 # train
 seed = 1
-embed_size = 1000
-hidden_size = 1000
-window_size_d = 30
+embed_size = 1000    #1000
+hidden_size = 1000   #1000
+window_size_d = 20
 encoder_layer = 4
 decoder_layers = 4
-dropout_rate = 0.3
-batch_size = 196
-dev_batch_size = 196
+dropout_rate = 0.2
+batch_size = 196    #196
+dev_batch_size = 196   #196
 clip_grad = 5
 valid_iter = 1
 model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/"

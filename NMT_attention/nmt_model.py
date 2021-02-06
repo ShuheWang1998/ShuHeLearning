@@ -286,15 +286,15 @@ class NMT(nn.Module):
                     if (next_all_h is None):
                         next_all_h = all_h[key].reshape(1, -1, self.hidden_size)
                         next_encode_len.append(encode_len[key].item())
-                        next_h = now_h[now_start-value+sent_id].reshape(1, 4, -1)
-                        next_c = now_c[now_start-value+sent_id].reshape(1, 4, -1)
+                        next_h = now_h[now_start-value+sent_id].reshape(1, self.encoder_layer, -1)
+                        next_c = now_c[now_start-value+sent_id].reshape(1, self.encoder_layer, -1)
                         now_ht = next_ht[now_start-value+sent_id].reshape(1, -1)
                         next_source = now_source[key].reshape(1, -1)
                     else:
                         next_all_h = torch.cat((next_all_h, all_h[key].reshape(1, sen_len, self.hidden_size)), dim=0)
                         next_encode_len.append(encode_len[key].item())
-                        next_h = torch.cat((next_h, now_h[now_start-value+sent_id].reshape(1, 4, -1)), dim=0)
-                        next_c = torch.cat((next_c, now_c[now_start-value+sent_id].reshape(1, 4, -1)), dim=0)
+                        next_h = torch.cat((next_h, now_h[now_start-value+sent_id].reshape(1, self.encoder_layer, -1)), dim=0)
+                        next_c = torch.cat((next_c, now_c[now_start-value+sent_id].reshape(1, self.encoder_layer, -1)), dim=0)
                         now_ht = torch.cat((now_ht, next_ht[now_start-value+sent_id].reshape(1, -1)), dim=0)
                         next_source = torch.cat((next_source, now_source[key].reshape(1, -1)), dim=0)
                 if (now_flag):

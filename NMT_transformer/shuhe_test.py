@@ -130,6 +130,7 @@ tensor_a = torch.tensor(a, dtype=torch.long)
 _, index_a = torch.topk(tensor_a[1:5], 2)
 print(index_a)
 '''
+'''
 path = "/data/wangshuhe/learn/process_data/test.txt"
 cnt = 0
 shuhe = []
@@ -145,3 +146,15 @@ with open(path, "w") as f:
     for line in shuhe:
         f.write(line)
     f.close()
+'''
+a = [1, 2, 3]
+tensor_a = torch.tensor(a, dtype=torch.float)
+tensor_b = tensor_a.clone()
+print(tensor_a)
+print(tensor_b)
+tensor_a[0] = 9
+print(tensor_a)
+print(tensor_b)
+tensor_b[0] = 10
+print(tensor_a)
+print(tensor_b)
