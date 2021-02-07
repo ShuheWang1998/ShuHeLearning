@@ -60,7 +60,8 @@ def train():
     #model = NMT.load(model_path)
     model = model.to(device)
     model.train()
-    optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
+    #optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
+    optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.warm_up_step, config.init_lr, config.lr)
     #optimizer = Optim(torch.optim.Adam(model.parameters()))
 
     epoch = 0
@@ -78,7 +79,9 @@ def train():
                 batch_loss = batch_loss.sum()
                 loss = batch_loss / now_batch_size
                 loss.backward()
-                optimizer.step_and_updata_lr()
+                optimizer.step()
+                optimizer.updata_lr()
+                #optimizer.step_and_updata_lr()
                 pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item()/tar_word_num))})
                 pbar.update(1)
         if (epoch % config.valid_iter == 0):
@@ -89,8 +92,8 @@ def train():
             if (flag):
                 print(f"current model is the best! save to [{config.model_save_path}]", file=sys.stderr)
                 history_valid_ppl.append(eval_ppl)
-                model.save(os.path.join(config.model_save_path, f"02.06_smooth_{epoch}_{eval_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.06_smooth_{epoch}_{eval_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.07_fairseq_{epoch}_{eval_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.07_fqirseq_{epoch}_{eval_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

@@ -43,7 +43,7 @@ def test():
     #test_data_src, test_data_tar = utils.read_corpus(config.test_path)
     test_data = Data(config.test_path_src, config.test_path_tar)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.06_smooth_24_7.45445637079273_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.01_18_7.513608155074286_checkpoint.pth"
     model = NMT.load(model_path)
     if (config.cuda):
         model = model.to(torch.device("cuda:0"))
