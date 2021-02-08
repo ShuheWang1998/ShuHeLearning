@@ -19,9 +19,9 @@ d_model = 512
 nhead = 8
 num_encoder_layers = 6
 num_decoder_layers = 6
-dim_feedforward = 2048
+dim_feedforward = 1024
 dropout = 0.3
-smoothing_eps = 0.1
+smoothing_eps = 0.05
 # dev
 dev_batch_size = 64
 model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/change/result/"

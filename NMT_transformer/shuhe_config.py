@@ -14,7 +14,7 @@ cuda = True
 warm_up_step = 4000
 lr = 3e-4
 init_lr = 1e-7
-train_batch_size = 128
+train_batch_size = 144
 max_epoch = 100000
 valid_iter = 1
 d_model = 512
@@ -25,7 +25,7 @@ dim_feedforward = 2048
 dropout = 0.1
 smoothing_eps = 0.1
 # dev
-dev_batch_size = 128
+dev_batch_size = 144
 model_save_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/"
 # test
 # checkpoint

@@ -42,7 +42,7 @@ def test():
     print(f"load test sentences from [{config.test_path_src}], [{config.test_path_tar}]", file=sys.stderr)
     test_data = Data(config.test_path_src, config.test_path_tar)
     test_data_loader = DataLoader(dataset=test_data, batch_size=config.test_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/02.07_layer3drop0.4_6_8.272545151154294_checkpoint.pth"
+    model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_attention/result/02.08_window35_6_8.810715463205241_checkpoint.pth"
     print(f"load model from {model_path}", file=sys.stderr)
     model = NMT.load(model_path)
     if (config.cuda):

@@ -106,8 +106,8 @@ def train():
             if (flag):
                 print("current model is the best!, save to [%s]" % (config.model_save_path), file=sys.stderr)
                 hist_valid_ppl.append(eav_ppl)
-                model.save(os.path.join(config.model_save_path, f"02.07_layer3drop0.5_{epoch}_{eav_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.07_layer3drop0.5_{epoch}_{eav_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.08_window35drop0.2_{epoch}_{eav_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.08_window35drop0.2_{epoch}_{eav_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

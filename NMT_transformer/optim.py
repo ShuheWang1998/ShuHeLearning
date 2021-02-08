@@ -42,7 +42,7 @@ class Optim():
     
     def updata_lr(self):
         self.update_num += 1
-        if (self.update_num <= self.warm_up_step):
+        if (self.update_num < self.warm_up_step):
             self.lr = self.lrs[self.update_num].item()
         else:
             decay_factor = self.end_lr * math.pow(self.warm_up_step, 0.5)
