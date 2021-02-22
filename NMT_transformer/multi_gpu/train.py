@@ -1,6 +1,6 @@
 import shuhe_config as config
 import torch
-#import torch.nn as nn
+import torch.nn as nn
 from nmt_model import NMT
 import math
 from tqdm import tqdm
@@ -9,17 +9,24 @@ import os
 from optim import Optim
 from data import Data
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from vocab import Text
 import utils
+import torch.distributed as dist
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-def evaluate_ppl(model, dev_data, dev_loader, dev_batch_size):
+def reduce_tensor(tensor):
+    dist.all_reduce(tensor, op=dist.reduce_op.SUM)
+    return tensor
+    
+def evaluate_ppl(model, dev_data, dev_loader, dev_batch_size, is_master_node=False):
     flag = model.training
     model.eval()
     sum_word = 0
     sum_loss = 0
     with torch.no_grad():
+        dev_loader.sampler.set_epoch(0)
         max_iter = int(math.ceil(len(dev_data)/dev_batch_size))
         with tqdm(total=max_iter, desc="validation") as pbar:
             for batch_src, batch_tar, tar_word_num in dev_loader:
@@ -29,16 +36,30 @@ def evaluate_ppl(model, dev_data, dev_loader, dev_batch_size):
                 loss = batch_loss / now_batch_size
                 sum_loss += batch_loss
                 sum_word += tar_word_num
-                pbar.set_postfix({"avg_pool": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item() / tar_word_num))})
-                pbar.update(1)
+                if (is_master_node):
+                    pbar.set_postfix({"avg_pool": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (batch_loss.item() / tar_word_num)})
+                    pbar.update(1)
     if (flag):
         model.train()
+    
     return math.exp(sum_loss.item() / sum_word)
 
-def train():
+def make_data_parallel(model, device):
+    if (device.type == 'cuda' and device.index is not None):
+        local_rank = torch.distributed.get_rank()
+        torch.cuda.set_device(local_rank)
+        model.to(device)
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[device])
+
+def train(index):
     torch.manual_seed(1)
     if (config.cuda):
         torch.cuda.manual_seed(1)
+    device = torch.device(f"cuda:{index}" if config.cuda else "cpu")
+    dist_rank = index
+    torch.distributed.init_process_group(backend='nccl', init_method='tcp://localhost:23456', rank=dist_rank, world_size=1)
+    is_master_node = (dist_rank == 0)
+    
     args = dict()
     args['embed_size'] = config.embed_size
     args['d_model'] = config.d_model
@@ -48,34 +69,29 @@ def train():
     args['dim_feedforward'] = config.dim_feedforward
     args['dropout'] = config.dropout
     args['smoothing_eps'] = config.smoothing_eps
+    
     text = Text(config.src_corpus, config.tar_corpus)
+    model = NMT(text, args, device)
+    model = make_data_parallel(model, device)
+    
     train_data = Data(config.train_path_src, config.train_path_tar)
     dev_data = Data(config.dev_path_src, config.dev_path_tar)
-    train_loader = DataLoader(dataset=train_data, batch_size=config.train_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    dev_loader = DataLoader(dataset=dev_data, batch_size=config.dev_batch_size, shuffle=True, collate_fn=utils.get_batch)
-    #train_data_src, train_data_tar = utils.read_corpus(config.train_path)
-    #dev_data_src, dev_data_tar = utils.read_corpus(config.dev_path)
-    device = torch.device("cuda:0" if config.cuda else "cpu")
-    model = NMT(text, args, device)
-    #model = nn.DataParallel(model, device_ids=[0, 1])
-    model = model.to(device)
-    #model = model.module
-    #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.01_1_344.6820465077113_checkpoint.pth"
-    #model = NMT.load(model_path)
-    #model = model.to(device)
+    train_sampler = DistributedSampler(train_data)
+    dev_sampler = DistributedSampler(dev_data)
+    train_loader = DataLoader(dataset=train_data, batch_size=int(config.train_batch_size/8), shuffle=False, num_workers=9, pin_memory=True, sampler=train_sampler, collate_fn=utils.get_batch)
+    dev_loader = DataLoader(dataset=dev_data, batch_size=int(config.dev_batch_size/8), shuffle=False, num_workers=9, pin_memory=True, sampler=dev_sampler, collate_fn=utils.get_batch)
+
     model.train()
     optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
-    #optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.warm_up_step, config.init_lr, config.lr)
-    #optimizer = Optim(torch.optim.Adam(model.parameters()))
 
     epoch = 0
     history_valid_ppl = []
     print("begin training!", file=sys.stderr)
     while (True):
         epoch += 1
+        train_loader.sampler.set_epoch(epoch)
         max_iter = int(math.ceil(len(train_data)/config.train_batch_size))
         with tqdm(total=max_iter, desc="train") as pbar:
-            #for batch_src, batch_tar, tar_word_num in utils.batch_iter(train_data_src, train_data_tar, config.train_batch_size):
             for batch_src, batch_tar, tar_word_num in train_loader:
                 optimizer.zero_grad()
                 now_batch_size = len(batch_src)
@@ -83,21 +99,22 @@ def train():
                 batch_loss = batch_loss.sum()
                 loss = batch_loss / now_batch_size
                 loss.backward()
-                #optimizer.step()
-                #optimizer.updata_lr()
+                torch.distributed.barrier()
                 optimizer.step_and_updata_lr()
-                pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item()/tar_word_num))})
-                pbar.update(1)
+                if (is_master_node):
+                    pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (batch_loss.item()/tar_word_num)})
+                    pbar.update(1)
         if (epoch % config.valid_iter == 0):
             print("now begin validation...", file=sys.stderr)
-            eval_ppl = evaluate_ppl(model, dev_data, dev_loader, config.dev_batch_size)
+            torch.distributed.barrier()
+            eval_ppl = evaluate_ppl(model, dev_data, dev_loader, config.dev_batch_size, is_master_node)
             print(eval_ppl)
             flag = len(history_valid_ppl) == 0 or eval_ppl < min(history_valid_ppl)
             if (flag):
                 print(f"current model is the best! save to [{config.model_save_path}]", file=sys.stderr)
                 history_valid_ppl.append(eval_ppl)
-                model.save(os.path.join(config.model_save_path, f"02.10_{epoch}_{eval_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.10_{epoch}_{eval_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.19_{epoch}_{eval_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.19_{epoch}_{eval_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

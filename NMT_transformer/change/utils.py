@@ -22,7 +22,8 @@ def read_corpus(file_path, flag=False):
                 now.append(0)
             for word in line:
                 now.append(int(word))
-            now.append(1)
+            if (flag):
+                now.append(1)
             output.append(now)
     return output
 

@@ -1,5 +1,6 @@
 import shuhe_config as config
 import torch
+#import torch.nn as nn
 from nmt_model import NMT
 import math
 from tqdm import tqdm
@@ -11,7 +12,7 @@ from torch.utils.data import DataLoader
 from vocab import Text
 import utils
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 def evaluate_ppl(model, dev_data, dev_loader, dev_batch_size):
     flag = model.training
@@ -56,16 +57,19 @@ def train():
     #dev_data_src, dev_data_tar = utils.read_corpus(config.dev_path)
     device = torch.device("cuda:0" if config.cuda else "cpu")
     model = NMT(text, args, device)
+    #model = nn.DataParallel(model, device_ids=[0, 1])
+    model = model.to(device)
+    #model = model.module
     #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.01_1_344.6820465077113_checkpoint.pth"
     #model = NMT.load(model_path)
-    model = model.to(device)
+    #model = model.to(device)
     model.train()
     optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
+    #optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.warm_up_step, config.init_lr, config.lr)
     #optimizer = Optim(torch.optim.Adam(model.parameters()))
 
     epoch = 0
     history_valid_ppl = []
-    valid_iter = config.valid_iter
     print("begin training!", file=sys.stderr)
     while (True):
         epoch += 1
@@ -77,15 +81,14 @@ def train():
                 now_batch_size = len(batch_src)
                 batch_loss = -model(batch_src, batch_tar, smoothing=True)
                 batch_loss = batch_loss.sum()
-                #batch_loss = model(batch_src, batch_tar, smoothing=True)
                 loss = batch_loss / now_batch_size
                 loss.backward()
+                #optimizer.step()
+                #optimizer.updata_lr()
                 optimizer.step_and_updata_lr()
                 pbar.set_postfix({"epoch": epoch, "avg_loss": '{%.2f}' % (loss.item()), "ppl": '{%.2f}' % (math.exp(batch_loss.item()/tar_word_num))})
                 pbar.update(1)
-        if (epoch >= 1000):
-            valid_iter = 1
-        if (epoch % valid_iter):
+        if (epoch % config.valid_iter == 0):
             print("now begin validation...", file=sys.stderr)
             eval_ppl = evaluate_ppl(model, dev_data, dev_loader, config.dev_batch_size)
             print(eval_ppl)
@@ -93,8 +96,8 @@ def train():
             if (flag):
                 print(f"current model is the best! save to [{config.model_save_path}]", file=sys.stderr)
                 history_valid_ppl.append(eval_ppl)
-                model.save(os.path.join(config.model_save_path, f"02.01_{epoch}_{eval_ppl}_checkpoint.pth"))
-                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.01_{epoch}_{eval_ppl}_optimizer.optim"))
+                model.save(os.path.join(config.model_save_path, f"02.10_{epoch}_{eval_ppl}_checkpoint.pth"))
+                torch.save(optimizer.optimizer.state_dict(), os.path.join(config.model_save_path, f"02.10_{epoch}_{eval_ppl}_optimizer.optim"))
         if (epoch == config.max_epoch):
             print("reach the maximum number of epochs!", file=sys.stderr)
             return

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from vocab import Text
 import utils
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 def evaluate_ppl(model, dev_data, dev_loader, dev_batch_size):
     flag = model.training
@@ -58,7 +58,7 @@ def train():
     model = NMT(text, args, device)
     #model_path = "/home/wangshuhe/shuhelearn/ShuHeLearning/NMT_transformer/result/02.01_1_344.6820465077113_checkpoint.pth"
     #model = NMT.load(model_path)
-    model = model.to(device)
+    model.to(device)
     model.train()
     optimizer = Optim(torch.optim.Adam(model.parameters(), betas=(0.9, 0.98), eps=1e-9), config.d_model, config.warm_up_step)
     #optimizer = Optim(torch.optim.Adam(model.parameters()))

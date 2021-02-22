@@ -1,4 +1,5 @@
 import math
+#import torch
 
 class Optim():
     
@@ -24,4 +25,31 @@ class Optim():
     
     def zero_grad(self):
         self.optimizer.zero_grad()
+    '''
+    def __init__(self, optimizer, warm_up_step, init_lr, end_lr):
+        self.warm_up_step = warm_up_step
+        self.optimizer = optimizer
+        self.init_lr = init_lr
+        self.end_lr = end_lr
+        self.lrs = torch.linspace(self.init_lr, self.end_lr, self.warm_up_step)
+        self.lr = self.lrs[0].item()
+        for para in self.optimizer.param_groups:
+            para['lr'] = self.lr
+        self.update_num = 0
     
+    def step(self):
+        self.optimizer.step()
+    
+    def updata_lr(self):
+        self.update_num += 1
+        if (self.update_num < self.warm_up_step):
+            self.lr = self.lrs[self.update_num].item()
+        else:
+            decay_factor = self.end_lr * math.pow(self.warm_up_step, 0.5)
+            self.lr = decay_factor / math.pow(self.update_num, 0.5)
+        for para in self.optimizer.param_groups:
+            para['lr'] = self.lr
+    
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+    '''
